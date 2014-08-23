@@ -72,31 +72,66 @@ model_name <- function(...) {
     paste(list(...), collapse="-")
 }
 
-process_model <- function(period_name, luminosity_name, data,
-                          var_name=NULL, mode="summary") {
+get_model <- function(data, period_name, luminosity_name,
+                      var_name=NULL) {
     P <- data[[period_name]]
     L <- data[[luminosity_name]]
     V <- if(is.character(var_name)) data[[var_name]] else NULL
-    if (mode == "summary") {
-        cat(
-            paste(
-                "#",
-                model_name(period_name, luminosity_name, var_name),
-                "relation"))
-        cat("\n\n")
-    }
     # make the model
     if(is.numeric(V)) lm(L ~ P + V) else lm(L ~ P)
 }
 
-display_model <- function(model, mode="summary") {
+display_summary <- function(model, period_name, luminosity_name,
+                            var_name=NULL) {
+    cat(
+        paste(
+            "#",
+            model_name(period_name, luminosity_name, var_name),
+            "relation"))
+    cat("\n\n")
+    cat("```")
+    print(summary(model))
+    cat("```\n")
+}
+
+display_header <- function(period_name) {
+    cat("Variable",
+        paste(c("Intercept", period_name, "Variable"),
+              c("d_Intercept", paste("d", period_name, sep="_"), "d_Variable"),
+              c("t_Intercept", paste("t", period_name, sep="_"), "t_Variable"),
+              c("Pr_Intercept", paste("Pr", period_name, sep="_"),
+                "Pr_Variable"),
+              sep="\t"), 
+        sep="\t", end="\n")
+}
+
+display_table <- function(model, var_name=NULL, ...) {
+    if (is.null(var_name)) var_name <- "NA"
+    summary   <- summary(model)
+    coefs     <- summary$coefficients
+    ncoefs    <- nrow(coefs)
+
+    estimates <- coefs[, 1]
+    stderrs   <- coefs[, 2]
+    tvalues   <- coefs[, 3]
+    probs     <- coefs[, 4]
+
+    if (ncoefs == 2) {
+        estimates <- c(estimates, "NA")
+        stderrs   <- c(stderrs,   "NA")
+        tvalues   <- c(tvalues,   "NA")
+        probs     <- c(probs,     "NA")
+    }
+
+    cat(var_name, end="\t")
+    cat(paste(estimates, stderrs, tvalues, probs, collapse="\t"), end="\n")
+}
+
+display_model <- function(model, mode="summary", ...) {
     if (mode == "summary") {
-        cat("```")
-        print(summary(model))
-        cat("```\n")
+        display_summary(model, ...)
     } else if (mode == "table") {
-        print("Table output not yet implemented.")
-#        stop()
+        display_table(model, ...)
     } else {
         print("Undefined mode.")
     }
@@ -124,15 +159,19 @@ main <- function() {
     period_name <- colnames(data)[opts$period.col]
     luminosity_name <- colnames(data)[opts$luminosity.col]
 
+    if (opts$mode == "table") {
+        display_header(period_name)
+    }
     # process and display L ~ P relation
-    r <- process_model(period_name, luminosity_name, data, mode=opts$mode)
-    display_model(r, mode=opts$mode)
+    r <- get_model(data, period_name, luminosity_name)
+    display_model(r, period_name, luminosity_name, var_name=NULL,
+                  mode=opts$mode)
     # process and display L ~ P + V relations
     for(var_name in colnames(data)) {
         if(var_name != period_name & var_name != luminosity_name) {
-            r <- process_model(period_name, luminosity_name, data, var_name,
-                               mode=opts$mode)
-            display_model(r, mode=opts$mode)
+            r <- get_model(data, period_name, luminosity_name, var_name)
+            display_model(r, period_name, luminosity_name, var_name=var_name,
+                          mode=opts$mode)
             if(is.character(opts$output)) {
                 plot_model(r)
             }
