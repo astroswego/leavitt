@@ -3,10 +3,12 @@
 library(optparse)
 
 get_options <- function() {
+    f <- file("stdin")
+    open(f)
     option_list <- list(
         make_option(
             c("-i", "--input"),
-            action="store", type="character", default="stdin",
+            action="store", type="character", default=f,#"stdin",
             help="Location of input table. Defaults to stdin."),
         make_option(
             c("-o", "--output"),
@@ -14,6 +16,10 @@ get_options <- function() {
             help=paste(
                 "Location to output plots.",
                 "No plots generated if not provided.")),
+        make_option(
+            "--mode",
+            action="store", type="character", default="summary",
+            help="Output mode (summary or table). Defaults to summary."),
         make_option(
             "--header",
             action="store_true", default=TRUE, dest="header",
@@ -62,30 +68,42 @@ get_options <- function() {
     opts
 }
 
-process_relation <- function(period_name, luminosity_name, data, var_name=NULL) {
-    periods <- data[, period_name]
-    luminosities <- data[, luminosity_name]
-    var <- data[, var_name]
+model_name <- function(...) {
+    paste(list(...), collapse="-")
+}
 
-    cat(
-        paste(
-            "Processing",
+process_model <- function(period_name, luminosity_name, data,
+                          var_name=NULL, mode="summary") {
+    P <- data[[period_name]]
+    L <- data[[luminosity_name]]
+    V <- if(is.character(var_name)) data[[var_name]] else NULL
+    if (mode == "summary") {
+        cat(
             paste(
-                c(
-                    period_name,
-                    luminosity_name,
-                    var_name),
-                collapse="-"),
-            "relation"))
-    cat("\n")
+                "#",
+                model_name(period_name, luminosity_name, var_name),
+                "relation"))
+        cat("\n\n")
+    }
+    # make the model
+    if(is.numeric(V)) lm(L ~ P + V) else lm(L ~ P)
 }
 
-display_relation <- function(relation) {
-    NULL
+display_model <- function(model, mode="summary") {
+    if (mode == "summary") {
+        cat("```")
+        print(summary(model))
+        cat("```\n")
+    } else if (mode == "table") {
+        print("Table output not yet implemented.")
+#        stop()
+    } else {
+        print("Undefined mode.")
+    }
 }
 
-plot_relation <- function(relation) {
-    NULL
+plot_model <- function(model) {
+    print("Plotting not yet implemented")
 }
 
 
@@ -93,23 +111,30 @@ plot_relation <- function(relation) {
 main <- function() {
     opts <- get_options()
 
-    data <- read.table(
+    data_<- read.table(
         opts$input, header=opts$header,
         row.names=opts$row.names)
+    low.periods <- if(is.numeric(opts$period.max))
+        data_[, opts$period.col] < opts$period.max else TRUE
+    high.periods <- if(is.numeric(opts$period.min))
+        data_[, opts$period.col] > opts$period.min else TRUE
 
-    data <- data[(data[, opts$period.col] > opts$period.min) &
-                 (data[, opts$period.col] < opts$period.max), ]
+    data <- data_[low.periods & high.periods]
 
     period_name <- colnames(data)[opts$period.col]
     luminosity_name <- colnames(data)[opts$luminosity.col]
 
-    process_relation(period_name, luminosity_name, data)
+    # process and display L ~ P relation
+    r <- process_model(period_name, luminosity_name, data, mode=opts$mode)
+    display_model(r, mode=opts$mode)
+    # process and display L ~ P + V relations
     for(var_name in colnames(data)) {
         if(var_name != period_name & var_name != luminosity_name) {
-            r <- process_relation(period_name, luminosity_name, data, var_name)
-            display_relation(r)
+            r <- process_model(period_name, luminosity_name, data, var_name,
+                               mode=opts$mode)
+            display_model(r, mode=opts$mode)
             if(is.character(opts$output)) {
-                plot_relation(r)
+                plot_model(r)
             }
         }
     }
