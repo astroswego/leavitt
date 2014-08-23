@@ -2,10 +2,10 @@
 
 library(optparse)
 
-get_options <- function() {
+get.options <- function() {
     f <- file("stdin")
     open(f)
-    option_list <- list(
+    option.list <- list(
         make_option(
             c("-i", "--input"),
             action="store", type="character", default=f,#"stdin",
@@ -57,7 +57,7 @@ get_options <- function() {
                 "Default is 3.")))
 
     opts <- parse_args(OptionParser(prog = "leavitt",
-                                    option_list=option_list))
+                                    option_list=option.list))
 
     opts$period.col <- opts$period.col -
         if((opts$row.names > 0) & (opts$row.names < opts$period.col))
@@ -68,25 +68,25 @@ get_options <- function() {
     opts
 }
 
-model_name <- function(...) {
+model.name <- function(...) {
     paste(list(...), collapse="-")
 }
 
-get_model <- function(data, period_name, luminosity_name,
-                      var_name=NULL) {
-    P <- data[[period_name]]
-    L <- data[[luminosity_name]]
-    V <- if(is.character(var_name)) data[[var_name]] else NULL
+get.model <- function(data, period.name, luminosity.name,
+                      var.name=NULL) {
+    P <- data[[period.name]]
+    L <- data[[luminosity.name]]
+    V <- if(is.character(var.name)) data[[var.name]] else NULL
     # make the model
     if(is.numeric(V)) lm(L ~ P + V) else lm(L ~ P)
 }
 
-display_summary <- function(model, period_name, luminosity_name,
-                            var_name=NULL) {
+display.summary <- function(model, period.name, luminosity.name,
+                            var.name=NULL) {
     cat(
         paste(
             "#",
-            model_name(period_name, luminosity_name, var_name),
+            model.name(period.name, luminosity.name, var.name),
             "relation"))
     cat("\n\n")
     cat("```")
@@ -94,19 +94,20 @@ display_summary <- function(model, period_name, luminosity_name,
     cat("```\n")
 }
 
-display_header <- function(period_name) {
+display.header <- function(period.name) {
     cat("Variable",
-        paste(c("Intercept", period_name, "Variable"),
-              c("d_Intercept", paste("d", period_name, sep="_"), "d_Variable"),
-              c("t_Intercept", paste("t", period_name, sep="_"), "t_Variable"),
-              c("Pr_Intercept", paste("Pr", period_name, sep="_"),
+        paste(c("Intercept", period.name, "Variable"),
+              c("d_Intercept", paste("d", period.name, sep="_"), "d_Variable"),
+              c("t_Intercept", paste("t", period.name, sep="_"), "t_Variable"),
+              c("Pr_Intercept", paste("Pr", period.name, sep="_"),
                 "Pr_Variable"),
               sep="\t"), 
         sep="\t", end="\n")
 }
 
-display_table <- function(model, var_name=NULL, ...) {
-    if (is.null(var_name)) var_name <- "NA"
+display.table <- function(model, var.name=NULL, ...) {
+    if (is.null(var.name)) var.name <- "NA"
+
     summary   <- summary(model)
     coefs     <- summary$coefficients
     ncoefs    <- nrow(coefs)
@@ -127,11 +128,11 @@ display_table <- function(model, var_name=NULL, ...) {
     cat(paste(estimates, stderrs, tvalues, probs, collapse="\t"), end="\n")
 }
 
-display_model <- function(model, mode="summary", ...) {
+display.model <- function(model, mode="summary", ...) {
     if (mode == "summary") {
-        display_summary(model, ...)
+        display.summary(model, ...)
     } else if (mode == "table") {
-        display_table(model, ...)
+        display.table(model, ...)
     } else {
         print("Undefined mode.")
     }
@@ -144,36 +145,39 @@ plot_model <- function(model) {
 
 
 main <- function() {
-    opts <- get_options()
+    opts <- get.options()
 
     data_<- read.table(
         opts$input, header=opts$header,
         row.names=opts$row.names)
-    low.periods <- if(is.numeric(opts$period.max))
-        data_[, opts$period.col] < opts$period.max else TRUE
-    high.periods <- if(is.numeric(opts$period.min))
-        data_[, opts$period.col] > opts$period.min else TRUE
+
+    low.periods <- if(is.numeric(opts$period.max)) {
+        data_[, opts$period.col] < opts$period.max
+    } else TRUE
+    high.periods <- if(is.numeric(opts$period.min)) {
+        data_[, opts$period.col] > opts$period.min
+    } else TRUE
 
     data <- data_[low.periods & high.periods]
 
-    period_name <- colnames(data)[opts$period.col]
-    luminosity_name <- colnames(data)[opts$luminosity.col]
+    period.name <- colnames(data)[opts$period.col]
+    luminosity.name <- colnames(data)[opts$luminosity.col]
 
     if (opts$mode == "table") {
-        display_header(period_name)
+        display.header(period.name)
     }
     # process and display L ~ P relation
-    r <- get_model(data, period_name, luminosity_name)
-    display_model(r, period_name, luminosity_name, var_name=NULL,
+    r <- get.model(data, period.name, luminosity.name)
+    display.model(r, period.name, luminosity.name, var.name=NULL,
                   mode=opts$mode)
     # process and display L ~ P + V relations
-    for(var_name in colnames(data)) {
-        if(var_name != period_name & var_name != luminosity_name) {
-            r <- get_model(data, period_name, luminosity_name, var_name)
-            display_model(r, period_name, luminosity_name, var_name=var_name,
+    for(var.name in colnames(data)) {
+        if(var.name != period.name & var.name != luminosity.name) {
+            r <- get.model(data, period.name, luminosity.name, var.name)
+            display.model(r, period.name, luminosity.name, var.name=var.name,
                           mode=opts$mode)
             if(is.character(opts$output)) {
-                plot_model(r)
+                plot.model(r)
             }
         }
     }
