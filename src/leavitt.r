@@ -54,9 +54,13 @@ get.options <- function() {
             action="store", type="integer", default=3,
             help=paste(
                 "Column in input file to read luminosities from.",
-                "Default is 3.")))
+                "Default is 3.")),
+        make_option(
+            "--distance-modulus", dest="distance.modulus",
+            action="store", type="double", default=0.0,
+            help="Distance modulus to apply to magnitudes"))
 
-    opts <- parse_args(OptionParser(prog = "leavitt",
+    opts <- parse_args(OptionParser(prog="leavitt",
                                     option_list=option.list))
 
     opts$period.col <- opts$period.col -
@@ -65,6 +69,16 @@ get.options <- function() {
     opts$luminosity.col <- opts$luminosity.col -
         if((opts$row.names > 0) & (opts$row.names < opts$luminosity.col))
             1 else 0
+
+    if(is.character(opts$output)) {
+        opts$output.plots <- file.path(opts$output, "plots")
+        opts$output.data <- file.path(opts$output, "data")
+
+        dir.create(opts$output,       showWarnings=FALSE)
+        dir.create(opts$output.plots, showWarnings=FALSE)
+        dir.create(opts$output.data,  showWarnings=FALSE)
+    }
+    
     opts
 }
 
@@ -73,9 +87,9 @@ model.name <- function(...) {
 }
 
 get.model <- function(data, period.name, luminosity.name,
-                      var.name=NULL) {
+                      var.name=NULL, distance.modulus=0.0) {
     P <- data[[period.name]]
-    L <- data[[luminosity.name]]
+    L <- data[[luminosity.name]]-distance.modulus
     V <- if(is.character(var.name)) data[[var.name]] else NULL
     # make the model
     if(is.numeric(V)) lm(L ~ P + V) else lm(L ~ P)
@@ -101,8 +115,9 @@ display.header <- function(period.name) {
               c("t_Intercept", paste("t", period.name, sep="_"), "t_Variable"),
               c("Pr_Intercept", paste("Pr", period.name, sep="_"),
                 "Pr_Variable"),
-              sep="\t"), 
-        sep="\t", end="\n")
+              sep="\t"),
+        sep="\t")
+    cat("\n")
 }
 
 display.table <- function(model, var.name=NULL, ...) {
@@ -124,8 +139,9 @@ display.table <- function(model, var.name=NULL, ...) {
         probs     <- c(probs,     "NA")
     }
 
-    cat(var_name, end="\t")
-    cat(paste(estimates, stderrs, tvalues, probs, collapse="\t"), end="\n")
+    cat(var.name, end="\t")
+    cat(paste(estimates, stderrs, tvalues, probs, collapse="\t"))
+    cat("\n")
 }
 
 display.model <- function(model, mode="summary", ...) {
@@ -138,8 +154,35 @@ display.model <- function(model, mode="summary", ...) {
     }
 }
 
-plot_model <- function(model) {
-    print("Plotting not yet implemented")
+plot.model <- function(model, output,
+                       period.name, luminosity.name, var.name=NULL,
+                       distance.modulus=0.0,
+                       data.color="black", fit.color="red") {
+    dir <- file.path(output,
+                     paste(
+                         paste(
+                             c(period.name,
+                               luminosity.name,
+                               var.name),
+                             collapse="_"),
+                         ".eps",
+                         sep=""))
+    setEPS()
+    postscript(dir)
+    plot(model$model[[2]], model$model[[1]]-distance.modulus,
+         xlab=period.name, ylab=luminosity.name, col=data.color)
+    points(model$model[[2]], model$fitted.values,
+           col=fit.color)
+    dev.off()
+}
+
+output.fitted.data <- function(model, data, output) {
+    data$fit <- model$fitted.values
+
+    unlink(output)
+    cat(file=output, "ID\t")
+    suppressWarnings(
+        write.table(data, output, sep="\t", quote=FALSE, append=TRUE))
 }
 
 
@@ -159,25 +202,57 @@ main <- function() {
     } else TRUE
 
     data <- data_[low.periods & high.periods]
+    col.names <- colnames(data)
 
-    period.name <- colnames(data)[opts$period.col]
-    luminosity.name <- colnames(data)[opts$luminosity.col]
+    id.name <- col.names[opts$row.names]
+    period.name <- col.names[opts$period.col]
+    luminosity.name <- col.names[opts$luminosity.col]
 
     if (opts$mode == "table") {
         display.header(period.name)
     }
     # process and display L ~ P relation
-    r <- get.model(data, period.name, luminosity.name)
-    display.model(r, period.name, luminosity.name, var.name=NULL,
+    model <- get.model(data, period.name, luminosity.name,
+                       opts$distance.modulus)
+    display.model(model, period.name, luminosity.name, var.name=NULL,
                   mode=opts$mode)
+    if(is.character(opts$output.plots)) {
+        plot.model(model, opts$output.plots, period.name, luminosity.name,
+                   opts$distance.modulus)
+    }
+    if(is.character(opts$output.data)) {
+        file <- file.path(opts$output.data,
+                          paste(
+                              paste(
+                                  c(period.name,
+                                    luminosity.name),
+                                  collapse="_"),
+                              ".dat",
+                              sep=""))
+        output.fitted.data(model, data, file)
+    }
     # process and display L ~ P + V relations
     for(var.name in colnames(data)) {
         if(var.name != period.name & var.name != luminosity.name) {
-            r <- get.model(data, period.name, luminosity.name, var.name)
-            display.model(r, period.name, luminosity.name, var.name=var.name,
+            model <- get.model(data, period.name, luminosity.name, var.name)
+            display.model(model,
+                          period.name, luminosity.name, var.name=var.name,
                           mode=opts$mode)
-            if(is.character(opts$output)) {
-                plot.model(r)
+            if(is.character(opts$output.plots)) {
+                plot.model(model, opts$output.plots,
+                           period.name, luminosity.name, var.name)
+            }
+            if(is.character(opts$output.data)) {
+                file <- file.path(opts$output.data,
+                                  paste(
+                                      paste(
+                                          c(period.name,
+                                            luminosity.name,
+                                            var.name),
+                                          collapse="_"),
+                                      ".dat",
+                                      sep=""))
+                output.fitted.data(model, data, file)
             }
         }
     }
