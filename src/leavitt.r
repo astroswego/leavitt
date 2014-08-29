@@ -190,7 +190,7 @@ output.fitted.data <- function(model, data, output) {
 main <- function() {
     opts <- get.options()
 
-    data_<- read.table(
+    data_ <- read.table(
         opts$input, header=opts$header,
         row.names=opts$row.names)
 
@@ -202,8 +202,8 @@ main <- function() {
     } else TRUE
 
     data <- data_[low.periods & high.periods]
-    col.names <- colnames(data)
 
+    col.names <- colnames(data)
     period.name <- col.names[opts$period.col]
     luminosity.name <- col.names[opts$luminosity.col]
 
@@ -212,12 +212,12 @@ main <- function() {
     }
     # process and display L ~ P relation
     model <- get.model(data, period.name, luminosity.name,
-                       opts$distance.modulus)
+                       distance.modulus=opts$distance.modulus)
     display.model(model, period.name, luminosity.name, var.name=NULL,
                   mode=opts$mode)
     if(is.character(opts$output.plots)) {
         plot.model(model, opts$output.plots, period.name, luminosity.name,
-                   opts$distance.modulus)
+                   distance.modulus=opts$distance.modulus)
     }
     if(is.character(opts$output.data)) {
         file <- file.path(opts$output.data,
@@ -233,13 +233,15 @@ main <- function() {
     # process and display L ~ P + V relations
     for(var.name in colnames(data)) {
         if(var.name != period.name & var.name != luminosity.name) {
-            model <- get.model(data, period.name, luminosity.name, var.name)
+            model <- get.model(data, period.name, luminosity.name, var.name,
+                               distance.modulus=opts$distance.modulus)
             display.model(model,
                           period.name, luminosity.name, var.name=var.name,
                           mode=opts$mode)
             if(is.character(opts$output.plots)) {
                 plot.model(model, opts$output.plots,
-                           period.name, luminosity.name, var.name)
+                           period.name, luminosity.name, var.name,
+                           distance.modulus=opts$distance.modulus)
             }
             if(is.character(opts$output.data)) {
                 file <- file.path(opts$output.data,
