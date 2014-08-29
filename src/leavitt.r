@@ -204,7 +204,6 @@ main <- function() {
     data <- data_[low.periods & high.periods]
     col.names <- colnames(data)
 
-    id.name <- col.names[opts$row.names]
     period.name <- col.names[opts$period.col]
     luminosity.name <- col.names[opts$luminosity.col]
 
