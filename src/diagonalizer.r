@@ -11,11 +11,6 @@ get.args <- function() {
         type="character",
         help="table containing variables to be modeled")
     parser$add_argument(
-        "--output",
-        choices=c("summary", "coefficients", "fitted.values"),
-        default="fitted.values",
-        help="output format")
-    parser$add_argument(
         "--header",
         action="store_true", default=TRUE,
         help="input table contains header line")
@@ -27,6 +22,12 @@ get.args <- function() {
         "--row-names", dest="row.names",
         action="store_true", default=FALSE,
         help="input table contains row names")
+    parser$add_argument(
+        "--col-prefix", dest="col.prefix",
+        default=FALSE,
+        help=paste(
+            "prefix to use in new column names.",
+            "if none given uses row names or 'V'"))
 
     args <- parser$parse_args()
 
@@ -34,13 +35,8 @@ get.args <- function() {
 
     args$row.names <- if (args$row.names) 1 else NULL
 
-    args
-}
 
-print.coefficients <- function(model) {
-    output <- capture.output(write.table(model$coefficients, quote=FALSE))
-    # remove backticks from output
-    cat(gsub("`", "", output), sep="\n")
+    args
 }
 
 main <- function() {
@@ -50,18 +46,24 @@ main <- function() {
                        header=args$header,
                        row.names=args$row.names,
                        check.names=FALSE)
+    # determine prefix for the new columns
+    col.prefix <-
+        # use user-provided prefix if one exists
+        if (is.character(args$col.prefix)) {
+            args$col.prefix
+        # use row names if they exist
+        } else if (is.numeric(args$row.names)) {
+            row.names(data)
+        # use the string "V" as a last resort
+        } else {
+            "V"
+        }
 
-    model <- lm(data)
+    identity.matrix <- diag(nrow(data))
+    
+    data[col.prefix] <- identity.matrix
 
-    if (args$output == "summary") {
-        print(summary(model))
-    } else if (args$output == "coefficients") {
-        print.coefficients(model)
-    } else if (args$output == "fitted.values") {
-        cat(model$fitted.values, sep="\n")
-    } else {
-        cat("invalid option", end="\n")
-    }
+    write.table(data, quote=FALSE)
 }
 
 main()
