@@ -51,7 +51,7 @@ def main():
     const_column = numpy.empty((rows, 1), dtype=object)
     const_column.fill(args.const)
 
-    column_separators = chain([0], args.columns, [-1])
+    column_separators = chain([0], args.columns, [None])
     column_pairs = list(pairwise(column_separators))
     column_groups = map(lambda indices:
                         slice_array_columnwise(in_table, *indices),
@@ -77,7 +77,7 @@ def main():
     return 0
 
 def slice_array_columnwise(array, start, stop):
-    return array[:, start:stop]
+    return array[:, start:stop] if stop is not None else array[:, start:]
 
 def pairwise(iterable):
     '''s -> (s0,s1), (s1,s2), (s2, s3), ...
