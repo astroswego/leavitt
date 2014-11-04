@@ -11,10 +11,15 @@ get.args <- function() {
         type="character",
         help="table containing variables to be modeled")
     parser$add_argument(
-        "--output",
+        "-o", "--output",
         choices=c("summary", "coefficients", "fitted.values"),
         default="fitted.values",
         help="output format")
+    parser$add_argument(
+        "-m", "--method",
+        choices=c("lm", "svd"),
+        default="lm",
+        help="fitting method")
     parser$add_argument(
         "--header",
         action="store_true", default=TRUE,
@@ -43,6 +48,50 @@ print.coefficients <- function(model) {
     cat(gsub("`", "", output), sep="\n")
 }
 
+fit.lm <- function(data, output) {
+    model <- lm(data[[1]] ~ . + 0, data=data[-1])
+
+    if (output == "summary") {
+        print(summary(model))
+    } else if (output == "coefficients") {
+        print.coefficients(model)
+    } else if (output == "fitted.values") {
+        cat(model$fitted.values, sep="\n")
+    } else {
+        cat("invalid option", end="\n")
+    }
+}
+
+fit.svd <- function(data, output) {
+    A <- data[-1]
+    b <- data[[ 1]]
+
+    svd.result <- svd(data)
+    D <- svd.result$d
+    U <- svd.result$u
+    V <- svd.result$v
+
+#    cat("V:", dim(V), "\n")
+#    cat("D^-1:", dim(solve(diag(D))), "\n")
+#    cat("U^T:", dim(t(U)), "\n")
+#    cat("b:", dim(b), "\n")
+
+    ## cat("U\n")
+    ## write.table(U)
+    ## cat("D\n")
+    ## write.table(D)
+    ## cat("V\n")
+    ## write.table(V)
+    ## cat("b\n")
+##     write.table(b)
+
+    
+    x <- V %*% solve(diag(D)) %*% t(U) %*% b
+
+    write.table(x)
+}
+
+
 main <- function() {
     args <- get.args()
 
@@ -51,16 +100,12 @@ main <- function() {
                        row.names=args$row.names,
                        check.names=FALSE)
 
-    model <- lm(data)
-
-    if (args$output == "summary") {
-        print(summary(model))
-    } else if (args$output == "coefficients") {
-        print.coefficients(model)
-    } else if (args$output == "fitted.values") {
-        cat(model$fitted.values, sep="\n")
+    if (args$method == "lm") {
+        fit.lm(data, args$output)
+    } else if (args$method == "svd") {
+        fit.svd(data, args$output)
     } else {
-        cat("invalid option", end="\n")
+        cat("invalid method", end="\n")
     }
 }
 

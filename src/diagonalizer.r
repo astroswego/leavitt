@@ -91,7 +91,6 @@ main <- function() {
     repeated.identity.matrices <- rep(list(identity.matrix), args$n.groups)
     stacked.identity.matrices <- do.call(rbind, repeated.identity.matrices)
 
-    print(stacked.identity.matrices)
     data[col.prefix] <- stacked.identity.matrices
 
     write.table(data, quote=args$quote, sep=args$output.sep, row.names=FALSE)

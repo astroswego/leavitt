@@ -1,6 +1,7 @@
 import numpy
 from argparse import ArgumentParser, SUPPRESS
 from itertools import chain, cycle, islice, repeat, tee
+from sys import stdin
 
 def get_args():
     parser = ArgumentParser()
