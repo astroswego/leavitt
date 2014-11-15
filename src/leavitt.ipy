@@ -1,0 +1,122 @@
+from argparse import ArgumentParser, ArgumentError, FileType, SUPPRESS
+from sys import stdin, stdout, stderr
+from tempfile import NamedTemporaryFile as make_temp
+
+def get_args():
+    parser = ArgumentParser(
+        prog="leavitt",
+        description="Computes the distance modulus to the stars contained in "
+            + "a table providing a name, logP and mean magnitudes in multiple "
+            + "bands for each star. Table is input through stdin")
+    general_group = parser.add_argument_group("General")
+    output_group = parser.add_argument_group("Output")
+    parameter_group = parser.add_argument_group("Parameters")
+
+    # General
+    general_group.add_argument("input_table", type=str,
+        help="file name of input table")
+    # Output
+    output_group.add_argument("--equations-file", type=str,
+        default=None,
+        help="prefix of files to save systems of equations in.")
+    output_group.add_argument("--modulus-file", type=str,
+        default=None,
+        help="prefix of files to save distance modulii in")
+    output_group.add_argument("--distance-file", type=str,
+        default=None,
+        help="prefix of files to save kpc distances in")
+    # Parameters
+    parameter_group.add_argument("--mean-distance-modulus", type=float,
+        default="18.41",
+        help="mean distance modulus of target "
+           + "defaults to mean LMC distance modulus (citation needed)")
+
+    args = parser.parse_args()
+
+    return args
+
+def main():
+    args = get_args()
+
+    return process(args.input_table, **vars(args))
+
+def process(input_file,
+            *,
+#            equations_file=None, modulus_file=None, distance_file=None,
+            mean_distance_modulus=0,
+            **kwargs):
+    # store stdin in file
+
+    # count the number of bands in the file,
+    # which should be 2 fewer than the total number of columns
+    n_cols, *_ = !head -n 1 $input_file | wc -w
+    n_bands = int(n_cols) - 2
+    
+    return process_iter(input_file,
+#                        equations_file, modulus_file, distance_file,
+                        mean_distance_modulus,
+                        n_bands, 0, **kwargs)
+
+def process_iter(input_file,
+                 mean_modulus,
+                 n_bands, iteration,
+                 *,
+                 equations_file=None, modulus_file=None, distance_file=None,
+                 **kwargs):
+    i = str(iteration)
+    if equations_file is not None:
+        equations_file = equations_file + i
+    else:
+        _equations_file = make_temp('wb')
+        equations_file = _equations_file.name
+    if modulus_file is not None:
+        modulus_file = modulus_file + i
+    else:
+        _modulus_file = make_temp('wb')
+        modulus_file = _modulus_file.name
+    if distance_file is not None:
+        distance_file = distance_file  + i
+    else:
+        _distance_file = make_temp('wb')
+        distance_file = _distance_file.name
+
+    _svd_file = make_temp('wb')
+    svd_file = _svd_file.name
+
+    # create input matrix
+    make_equations(input_file, equations_file, n_bands)
+    # find distance modulii and shift by target's mean modulus
+    !Rscript ols.r $equations_file --method svd --no-header \
+       | tail -n +2 \
+       | cut -d " " -f 2 \
+       > $svd_file
+
+    print(svd_file)
+    !cat $svd_file \
+       | awk -v m=$mean_modulus '{printf ($1 + m) "\n"}' > "$modulus_file"
+
+    print(modulus_file)
+    # convert distance modulii to kiloparsecs
+    !cat $modulus_file | Rscript distmod.r | awk '{printf ($1 / 1000)}' > "$distance_file"
+    print(distance_file)
+    ## do sigma clipping here, and recur if not finished
+
+    # finally, print the final distances and exit
+    !cat $distance_file
+
+    return 0
+
+def make_equations(input_file, equations_file, n_bands):
+    _ = !wc -l $input_file
+    lines = _.fields()[0][0]
+    !> $equations_file
+    for i in range(n_bands):
+        !cat $input_file \
+           | awk -v i=$i \
+                 -v n=$n_bands \
+                 -v lines=$lines \
+                 -f column.awk \
+           >> $equations_file
+
+if __name__ == "__main__":
+    main()

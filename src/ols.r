@@ -72,8 +72,6 @@ fit.svd <- function(data, output) {
     D[D <= 1e-10] <- 0
     U <- svd.result$u
     V <- svd.result$v
-
-#    write.table(D)
     
     x <- V %*% D %*% t(U) %*% b
 
