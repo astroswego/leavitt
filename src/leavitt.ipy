@@ -18,7 +18,10 @@ def get_args():
     # Output
     output_group.add_argument("--equations-file", type=str,
         default=None,
-        help="prefix of files to save systems of equations in.")
+        help="prefix of files to save systems of equations in")
+    output_group.add_argument("--svd-file", type=str,
+        default=None,
+        help="prefix of files to save svd output in")
     output_group.add_argument("--modulus-file", type=str,
         default=None,
         help="prefix of files to save distance modulii in")
@@ -28,8 +31,11 @@ def get_args():
     # Parameters
     parameter_group.add_argument("--mean-distance-modulus", type=float,
         default="18.41",
-        help="mean distance modulus of target "
-           + "defaults to mean LMC distance modulus (citation needed)")
+        help="mean distance modulus of target. "
+             "defaults to mean LMC distance modulus (citation needed)")
+    parameter_group.add_argument("-s", "--sigma", type=float,
+        default=3.0,
+        help="cutoff standard deviation for iterative sigma clipping")
 
     args = parser.parse_args()
 
@@ -53,7 +59,6 @@ def process(input_file,
     n_bands = int(n_cols) - 2
     
     return process_iter(input_file,
-#                        equations_file, modulus_file, distance_file,
                         mean_distance_modulus,
                         n_bands, 0, **kwargs)
 
@@ -61,50 +66,75 @@ def process_iter(input_file,
                  mean_modulus,
                  n_bands, iteration,
                  *,
-                 equations_file=None, modulus_file=None, distance_file=None,
+                 sigma,
+                 equations_file=None, svd_file=None,
+                 modulus_file=None, distance_file=None,
                  **kwargs):
     i = str(iteration)
     if equations_file is not None:
-        equations_file = equations_file + i
+        _equations_file = equations_file + i
     else:
-        _equations_file = make_temp('wb')
-        equations_file = _equations_file.name
+        _equations_file = make_temp('wb').name
     if modulus_file is not None:
-        modulus_file = modulus_file + i
+        _modulus_file = modulus_file + i
     else:
-        _modulus_file = make_temp('wb')
-        modulus_file = _modulus_file.name
+        _modulus_file = make_temp('wb').name
     if distance_file is not None:
-        distance_file = distance_file  + i
+        _distance_file = distance_file + i
     else:
-        _distance_file = make_temp('wb')
-        distance_file = _distance_file.name
-
-    _svd_file = make_temp('wb')
-    svd_file = _svd_file.name
+        _distance_file = make_temp('wb').name
+    if svd_file is not None:
+        _svd_file = svd_file + i
+    else:
+        _svd_file = make_temp('wb').name
 
     # create input matrix
-    make_equations(input_file, equations_file, n_bands)
+    make_equations(input_file, _equations_file, n_bands)
+
     # find distance modulii and shift by target's mean modulus
-    !Rscript ols.r $equations_file --method svd --no-header \
+    !Rscript ols.r $_equations_file --method svd --no-header \
        | tail -n +2 \
        | cut -d " " -f 2 \
-       > $svd_file
+       > $_svd_file
 
-    print(svd_file)
-    !cat $svd_file \
-       | awk -v m=$mean_modulus '{printf ($1 + m) "\n"}' > "$modulus_file"
-
-    print(modulus_file)
+    !cat $_svd_file \
+       | tail -n +$((1 + 2 * $n_bands)) \
+       | awk -v const=$mean_modulus \
+             -f addconst.awk \
+       > $_modulus_file
+       
     # convert distance modulii to kiloparsecs
-    !cat $modulus_file | Rscript distmod.r | awk '{printf ($1 / 1000)}' > "$distance_file"
-    print(distance_file)
+    !cat $_modulus_file \
+       | Rscript distmod.r \
+       | awk -v divisor=1000 \
+             -f divide.awk \
+       > $_distance_file
     ## do sigma clipping here, and recur if not finished
+    next_input_file = make_temp('wb').name
+    !python sigma_clip.py $_distance_file $input_file --sigma $sigma \
+       > $next_input_file
 
-    # finally, print the final distances and exit
-    !cat $distance_file
+    original_star_count = !wc -l $input_file
+    clipped_star_count = !wc -l $next_input_file
 
-    return 0
+    if line_count(input_file) == line_count(next_input_file):
+        # finally, print the final distances and exit
+        !cat $input_file \
+           | cut -d " " -f 1 \
+           | paste - $_distance_file
+        return 0
+    else:
+        return process_iter(next_input_file,
+                            mean_modulus,
+                            n_bands, iteration+1,
+                            sigma=sigma,
+                            equations_file=equations_file,
+                            svd_file=svd_file,
+                            modulus_file=modulus_file,
+                            distance_file=distance_file)
+        
+
+    
 
 def make_equations(input_file, equations_file, n_bands):
     _ = !wc -l $input_file
@@ -118,5 +148,13 @@ def make_equations(input_file, equations_file, n_bands):
                  -f column.awk \
            >> $equations_file
 
+def line_count(filename):
+    # count the lines in the file
+    wc_output = !wc -l $filename
+    # remove information other than line count, and convert to an int
+    count = int(wc_output[0].strip().split()[0])
+
+    return count
+           
 if __name__ == "__main__":
     main()
