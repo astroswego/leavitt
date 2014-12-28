@@ -1,3 +1,5 @@
+import numpy
+
 def convert_units(modulii, units):
     """Converts units from modulii to parsecs and kiloparsecs"""
     if units == "modulii":
@@ -11,3 +13,6 @@ def convert_units(modulii, units):
 
 def zscore(X):
     return (X - X.mean()) / X.std()
+
+def colvec(X):
+    return numpy.reshape(X, (-1, 1))

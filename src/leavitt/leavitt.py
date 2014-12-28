@@ -5,23 +5,27 @@ import numpy
 import pandas
 from pandas import DataFrame
 from pandas.io.parsers import read_table
-from itertools import count
-from leavitt.regression import diagonalize, svd
+from itertools import chain, count, product
+from leavitt.regression import distance_formula
 from leavitt.utils import convert_units, zscore
-
-regressor_choices = {
-    "svd": svd
-}
 
 sigma_choices = {
     "zscore": zscore
 }
 
+def add_coeff_rows(frame, independent_vars, dependent_vars, add_const,
+                   **kwargs):
+    if add_const:
+        independent_vars = chain(independent_vars, ["const"])
+    for (dep, ind) in product(dependent_vars, independent_vars):
+        coeff_name = "{}_{}".format(ind, dep)
+        frame.loc[coeff_name] = numpy.nan
+    
+
 def get_args():
     parser = ArgumentParser(prog="leavitt")
 
     general_group    = parser.add_argument_group("General")
-    output_group     = parser.add_argument_group("Optional Output")
     regression_group = parser.add_argument_group("Regression")
     outlier_group    = parser.add_argument_group("Outlier Detection")
 
@@ -47,24 +51,16 @@ def get_args():
         help="Distance units "
              "(default = modulii)")
 
-    ## Output Options ##
-    output_group.add_argument("--regression-input-file", type=str,
-        default=None,
-        help="(optionally) save regression input matrices to files with this"
-             "prefix")
-    output_group.add_argument("--regression-output-file", type=str,
-        default=None,
-        help="(optionally) save regression output matrices to files with this"
-             "prefix")
-    output_group.add_argument("--distance-file", type=str,
-        default=None,
-        help="(optionally) save fitted distances to files with this prefix")
-
     ## Regression Options ##
-    regression_group.add_argument("-r", "--regressor", type=str,
-        default="svd", choices=["svd"],
-        help="Method used for solving least-squares matrix "
-             "(default = svd)")
+    regression_group.add_argument("--dependent-vars", type=str, nargs="+",
+        metavar="VAR",
+        help="List of dependent variables to regress on")
+    regression_group.add_argument("--independent-vars", type=str, nargs="+",
+        metavar="VAR",
+        help="List of independent variables to regress on")
+    regression_group.add_argument("--add-const", action="store_true",
+        default=False,
+        help="Add a constant term to each equation")
 
     ## Outlier Options ##
     outlier_group.add_argument("--sigma", type=float,
@@ -78,7 +74,6 @@ def get_args():
 
     args = parser.parse_args()
 
-    args.regressor = regressor_choices[args.regressor]
     args.sigma_method = sigma_choices[args.sigma_method]
 
     return args
@@ -89,10 +84,16 @@ def main(args=None):
 
     data = read_table(args.input, index_col=0, sep=args.sep,
                       engine="python")
+    add_coeff_rows(data, **vars(args))
+    n_coeff = len(args.dependent_vars) * (len(args.independent_vars) + args.add_const)
 
+    y, A = distance_formula(data,
+                            args.dependent_vars, args.independent_vars,
+                            args.add_const)
+    x, *_ = numpy.linalg.lstsq(A, y)
+    x[:-n_coeff] = convert_units(x[:-n_coeff], args.units)
+    data["dist_0"] = x
 
-    data["dist_0"] = convert_units(args.regressor(diagonalize(data)),
-                                   args.units)
     for iteration in count(start=1):
         prev_label = "dist_{}".format(iteration-1)
         prev_selected = data.loc[~numpy.isnan(data[prev_label])]
@@ -105,9 +106,16 @@ def main(args=None):
             break
 
         next_label = "dist_{}".format(iteration)
-        data[next_label] = convert_units(
-            args.regressor(diagonalize(next_selected)),
-            args.units)
+        y, A = distance_formula(next_selected,
+                                args.dependent_vars, args.independent_vars,
+                                args.add_const)
+        y, A = distance_formula(data,
+                            args.dependent_vars, args.independent_vars,
+                            args.add_const)
+        x, *_ = numpy.linalg.lstsq(A, y)
+        x[:-n_coeff] = convert_units(x[:-n_coeff], args.units)
+
+        data[next_label] = x
 
     data.to_csv(stdout, sep="\t")
 
