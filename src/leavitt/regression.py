@@ -1,7 +1,12 @@
+from functools import reduce
 from itertools import chain, repeat
 import numpy
 
 from leavitt.utils import colvec
+
+__all__ = [
+    "distance_formula"
+]
 
 def _make_tile(frame, independent_vars, add_const, N):
     cols = [colvec(frame[var].dropna()) for var in independent_vars]
@@ -39,3 +44,14 @@ def distance_formula(frame, dependent_vars, independent_vars, add_const=False):
                                                      for var in dependent_vars))
 
     return stacked_dependent_vars, stacked_rows
+
+def svd(A, b, tol=1e-10):
+    """Solves for x in 'A x = b' using SVD."""
+    U, s, V = numpy.linalg.svd(A, full_matrices=False)
+    D = numpy.diag(s)
+    D[D >  tol] = 1/D[D > tol]
+    D[D <= tol] = 0
+
+    return reduce(numpy.dot, [V, D, U.T, b])
+
+    return numpy.dot(V, numpy.dot(D, numpy.dot(U.T, b)))

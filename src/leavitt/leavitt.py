@@ -6,7 +6,7 @@ import pandas
 from pandas import DataFrame
 from pandas.io.parsers import read_table
 from itertools import chain, count, product
-from leavitt.regression import distance_formula
+from leavitt.regression import distance_formula, svd
 from leavitt.utils import convert_units, zscore
 
 sigma_choices = {
@@ -34,10 +34,6 @@ def get_args():
         default=stdin,
         help="Input table "
              "(default = stdin)")
-    general_group.add_argument("-o", "--output", type=str,
-        default=".",
-        help="Output directory "
-             "(default = current directory)")
     general_group.add_argument("-f", "--format", type=str,
         default="%.5f",
         help="format specifier for output "
@@ -50,6 +46,11 @@ def get_args():
         default="modulii", choices=["modulii", "pc", "kpc"],
         help="Distance units "
              "(default = modulii)")
+    general_group.add_argument("-m", "--mean-modulus", type=float,
+        default=0.0,
+        help="Mean distance modulus of target, to be added to the obtained "
+             "modulii "
+             "(default = 0.0)")
 
     ## Regression Options ##
     regression_group.add_argument("--dependent-vars", type=str, nargs="+",
@@ -85,15 +86,16 @@ def main(args=None):
     data = read_table(args.input, index_col=0, sep=args.sep,
                       engine="python")
     add_coeff_rows(data, **vars(args))
-    n_coeff = len(args.dependent_vars) * (len(args.independent_vars) + args.add_const)
+    n_coeff = len(args.dependent_vars) * (len(args.independent_vars)
+                                        + args.add_const)
 
     y, A = distance_formula(data.dropna(),
                             args.dependent_vars, args.independent_vars,
                             args.add_const)
-#    print("y ="); numpy.savetxt(stdout.buffer, y, fmt="%.5f")
-#    print("A ="); numpy.savetxt(stdout.buffer, A, fmt="%.5f")
-    x = numpy.linalg.lstsq(A, y, rcond=1)[0]
-    x[:-n_coeff] = convert_units(x[:-n_coeff], args.units)
+
+#    x = numpy.linalg.lstsq(A, y, rcond=1)[0]
+    x = svd(A, y)
+    x[:-n_coeff] = convert_units(x[:-n_coeff]+args.mean_modulus, args.units)
     data["dist_0"] = x
 
     for iteration in count(start=1):
@@ -111,12 +113,13 @@ def main(args=None):
         y, A = distance_formula(next_selected,
                                 args.dependent_vars, args.independent_vars,
                                 args.add_const)
-        x = numpy.linalg.lstsq(A, y, rcond=1)[0]
-        x[:-n_coeff] = convert_units(x[:-n_coeff], args.units)
+#        x = numpy.linalg.lstsq(A, y, rcond=1)[0]
+        x = svd(A, y)
+        x[:-n_coeff] = convert_units(x[:-n_coeff]+args.mean_modulus, args.units)
 
         data[next_label] = x
 
-    data.to_csv(stdout, sep="\t")
+    data.to_csv(stdout, sep="\t", na_rep="NaN")
 
     return 0
 
