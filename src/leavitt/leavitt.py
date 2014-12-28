@@ -87,10 +87,12 @@ def main(args=None):
     add_coeff_rows(data, **vars(args))
     n_coeff = len(args.dependent_vars) * (len(args.independent_vars) + args.add_const)
 
-    y, A = distance_formula(data,
+    y, A = distance_formula(data.dropna(),
                             args.dependent_vars, args.independent_vars,
                             args.add_const)
-    x, *_ = numpy.linalg.lstsq(A, y)
+#    print("y ="); numpy.savetxt(stdout.buffer, y, fmt="%.5f")
+#    print("A ="); numpy.savetxt(stdout.buffer, A, fmt="%.5f")
+    x = numpy.linalg.lstsq(A, y, rcond=1)[0]
     x[:-n_coeff] = convert_units(x[:-n_coeff], args.units)
     data["dist_0"] = x
 
@@ -109,10 +111,7 @@ def main(args=None):
         y, A = distance_formula(next_selected,
                                 args.dependent_vars, args.independent_vars,
                                 args.add_const)
-        y, A = distance_formula(data,
-                            args.dependent_vars, args.independent_vars,
-                            args.add_const)
-        x, *_ = numpy.linalg.lstsq(A, y)
+        x = numpy.linalg.lstsq(A, y, rcond=1)[0]
         x[:-n_coeff] = convert_units(x[:-n_coeff], args.units)
 
         data[next_label] = x
