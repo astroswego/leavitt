@@ -45,13 +45,20 @@ def distance_formula(frame, dependent_vars, independent_vars, add_const=False):
 
     return stacked_dependent_vars, stacked_rows
 
-def svd(A, b, tol=1e-10):
-    """Solves for x in 'A x = b' using SVD."""
+def svd(A, b, debug=True):
+    """Solves for x in `A x = b` using SVD."""
     U, s, V = numpy.linalg.svd(A, full_matrices=False)
-    D = numpy.diag(s)
-    D[D >  tol] = 1/D[D > tol]
-    D[D <= tol] = 0
+    print("U:", U.shape)
+    print("s:", s.shape)
+    print("V:", V.shape)
 
-    return reduce(numpy.dot, [V, D, U.T, b])
+    c = numpy.dot(U.T, b)
+    print("c:", c.shape)
+    w = numpy.linalg.solve(numpy.diag(s), c)
+    print("w:", w.shape)
 
-    return numpy.dot(V, numpy.dot(D, numpy.dot(U.T, b)))
+    return numpy.dot(V.T, w)
+
+def lstsq(*args, **kwargs):
+    x, residuals, rank, s = numpy.linalg.lstsq(*args, **kwargs)
+    return x

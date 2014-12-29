@@ -1,5 +1,11 @@
 import numpy
 
+def char(x):
+    if isinstance(x, str) and len(x) == 1:
+        return x
+    else:
+        raise Exception("Must be a single character string: {}".format(x))
+
 def convert_units(modulii, units):
     """Converts units from modulii to parsecs and kiloparsecs"""
     if units == "modulii":
@@ -12,7 +18,7 @@ def convert_units(modulii, units):
         raise NotImplementedError
 
 def zscore(X):
-    return (X - X.mean()) / X.std()
+    return (X - numpy.nanmean(X)) / numpy.nanstd(X)
 
 def colvec(X):
     return numpy.reshape(X, (-1, 1))

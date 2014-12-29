@@ -6,8 +6,8 @@ import pandas
 from pandas import DataFrame
 from pandas.io.parsers import read_table
 from itertools import chain, count, product
-from leavitt.regression import distance_formula, svd
-from leavitt.utils import convert_units, zscore
+from leavitt.regression import distance_formula, lstsq, svd
+from leavitt.utils import char, convert_units, zscore
 
 sigma_choices = {
     "zscore": zscore
@@ -26,6 +26,7 @@ def get_args():
     parser = ArgumentParser(prog="leavitt")
 
     general_group    = parser.add_argument_group("General")
+    format_group     = parser.add_argument_group("Formatting")
     regression_group = parser.add_argument_group("Regression")
     outlier_group    = parser.add_argument_group("Outlier Detection")
 
@@ -34,14 +35,6 @@ def get_args():
         default=stdin,
         help="Input table "
              "(default = stdin)")
-    general_group.add_argument("-f", "--format", type=str,
-        default="%.5f",
-        help="format specifier for output "
-             "(default = .5f)")
-    general_group.add_argument("--sep", type=str,
-        default="\s",
-        help="separator in input/output tables "
-             "(default = whitespace)")
     general_group.add_argument("-u", "--units", type=str,
         default="modulii", choices=["modulii", "pc", "kpc"],
         help="Distance units "
@@ -51,6 +44,26 @@ def get_args():
         help="Mean distance modulus of target, to be added to the obtained "
              "modulii "
              "(default = 0.0)")
+
+    ## Formatting Options ##
+    format_group.add_argument("-f", "--format", type=str,
+        default="%.5f",
+        help="Format specifier for output "
+             "(default = .5f)")
+    format_group.add_argument("--sep", type=str,
+        default="\s",
+        help="Separator in input tables (can be a regular expression) "
+             "(default = whitespace)")
+    format_group.add_argument("--output-sep", type=char,
+        default="\t",
+        help="Separator in output tables (a single character) "
+             "(default = \t)")
+    format_group.add_argument("--distance-label", type=str, metavar="LABEL",
+        default="dist",
+        help="Label for all distance columns. "
+             "Columns are titled LABEL_0 ... LABEL_N, "
+             "and LABEL_N is duplicated as just LABEL "
+             "(default = dist)")
 
     ## Regression Options ##
     regression_group.add_argument("--dependent-vars", type=str, nargs="+",
@@ -62,6 +75,11 @@ def get_args():
     regression_group.add_argument("--add-const", action="store_true",
         default=False,
         help="Add a constant term to each equation")
+    regression_group.add_argument("--rcond", type=float,
+        default=1e-3,
+        help="Singular values are set to zero if they are smaller than "
+             "`rcond` times the largest singular value "
+             "(default = 1e-3)")
 
     ## Outlier Options ##
     outlier_group.add_argument("--sigma", type=float,
@@ -88,21 +106,72 @@ def main(args=None):
     add_coeff_rows(data, **vars(args))
     n_coeff = len(args.dependent_vars) * (len(args.independent_vars)
                                         + args.add_const)
+    nrows, ncols = data.shape
+    arg_coeff = numpy.arange(nrows-n_coeff, nrows)
 
+    label = lambda i: (args.distance_label + "_{}").format(i)
+
+    for i in count():
+        selection = data.dropna()
+        if i == 0:
+            arg_selected = numpy.arange(data.shape[0])
+        else:
+            prev_dist = selection[label(i-1)].iloc[:-n_coeff]
+            sigmas = abs(args.sigma_method(prev_dist))
+#            print(sigmas)
+            arg_selected = numpy.arange(nrows)[sigmas.values < args.sigma]
+#            print(arg_selected); exit()
+
+            n_selected = arg_selected.shape[0]
+            n_prev     = prev_dist.dropna().shape[0]
+
+            print("n_selected:n_prev = {}:{}".format(n_selected, n_prev),
+                  file=stderr)
+            # finished sigma clipping
+            if n_selected == n_prev:
+                data[args.distance_label] = data[label(i-1)]
+                break
+
+#            print("shape before:", arg_selected.shape, file=stderr)
+#            print("A:", arg_selected, file=stderr)
+#            exit()
+
+            selection = selection.iloc[arg_selected]
+            arg_selected = numpy.concatenate([arg_selected, arg_coeff])
+
+#            print("shape after:", arg_selected.shape, file=stderr)
+            
+        y, A = distance_formula(selection,
+                                args.dependent_vars, args.independent_vars,
+                                args.add_const)
+        x = lstsq(A, y, rcond=args.rcond)
+        x[:-n_coeff] = convert_units(x[:-n_coeff]+args.mean_modulus,
+                                     args.units)
+        # restrict this to the args != NaN, except for the coeffs
+        data[label(i)] = numpy.nan
+#        print(data[label(i)].iloc[arg_selected]); exit()
+        data[label(i)].iloc[arg_selected] = x
+#        data[label(i)].loc[-n_coeff:] = x[-n_coeff:]
+
+
+    """
+
+    
     y, A = distance_formula(data.dropna(),
                             args.dependent_vars, args.independent_vars,
                             args.add_const)
 
 #    x = numpy.linalg.lstsq(A, y, rcond=1)[0]
-    x = svd(A, y)
+    x = args.regressor(A, y, rcond=1e-3)
     x[:-n_coeff] = convert_units(x[:-n_coeff]+args.mean_modulus, args.units)
     data["dist_0"] = x
 
     for iteration in count(start=1):
         prev_label = "dist_{}".format(iteration-1)
-        prev_selected = data.loc[~numpy.isnan(data[prev_label])]
-        arg_selected = (prev_selected[[prev_label]].values
-                        < args.sigma).flatten()
+        prev_selected = data.dropna()
+#        prev_selected = data.loc[~numpy.isnan(data[prev_label])]
+        arg_selected = (args.sigma_method(prev_selected[prev_label].values)
+                        < args.sigma)#.flatten()
         next_selected = prev_selected.loc[arg_selected]
 
         # finished sigma clipping
@@ -114,12 +183,14 @@ def main(args=None):
                                 args.dependent_vars, args.independent_vars,
                                 args.add_const)
 #        x = numpy.linalg.lstsq(A, y, rcond=1)[0]
-        x = svd(A, y)
+        x = args.regressor(A, y)
         x[:-n_coeff] = convert_units(x[:-n_coeff]+args.mean_modulus, args.units)
 
-        data[next_label] = x
+        data[next_label][arg_selected] = x
 
-    data.to_csv(stdout, sep="\t", na_rep="NaN")
+    """
+
+    data.to_csv(stdout, sep=args.output_sep, na_rep="NaN")
 
     return 0
 
