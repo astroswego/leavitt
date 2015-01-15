@@ -6,9 +6,9 @@ import pandas
 from pandas import DataFrame
 from pandas.io.parsers import read_table
 from itertools import chain, count, product
-from leavitt.regression import distance_formula, fit_with_sigma_clip
+from leavitt.regression import fit_with_sigma_clip
 from leavitt.error import monte_carlo
-from leavitt.utils import char, convert_units, zscore
+from leavitt.utils import char, zscore
 
 error_choices = {
     "None" : None,
@@ -90,13 +90,17 @@ def get_args():
 
     ## Outlier Options ##
     outlier_group.add_argument("--sigma", type=float,
-        default=numpy.PINF,
+        default=0,
         help="rejection criterion for outliers "
              "(default = infinity)")
     outlier_group.add_argument("--sigma-method", metavar="M", type=str,
         default="zscore", choices=["zscore"],
         help="sigma clipping method to use "
              "(default = standard)")
+    outlier_group.add_argument("--sigma-max-iter", metavar="N", type=int,
+        default=20,
+        help="maximum number of iterations to use in sigma clipping "
+             "(default = 20)")
 
     ## Error Analysis Options ##
     error_group.add_argument("--error-method", type=str, metavar="METHOD",
@@ -181,7 +185,8 @@ def main(args=None):
         fit = fit_with_sigma_clip(dependent_vars, independent_vars,
                                   args.add_const,
                                   args.sigma_method, args.sigma,
-                                  args.mean_modulus, args.units)
+                                  args.mean_modulus, args.units,
+                                  args.rcond, args.sigma_max_iter)
         data[args.distance_label] = fit
 
     data.to_csv(stdout, sep=args.output_sep, na_rep="NaN")
