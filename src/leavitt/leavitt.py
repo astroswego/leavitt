@@ -6,8 +6,14 @@ import pandas
 from pandas import DataFrame
 from pandas.io.parsers import read_table
 from itertools import chain, count, product
-from leavitt.regression import distance_formula, lstsq, svd
+from leavitt.regression import distance_formula, fit_with_sigma_clip
+from leavitt.error import monte_carlo
 from leavitt.utils import char, convert_units, zscore
+
+error_choices = {
+    "None" : None,
+    "Monte_Carlo" : monte_carlo
+}
 
 sigma_choices = {
     "zscore": zscore
@@ -29,6 +35,7 @@ def get_args():
     format_group     = parser.add_argument_group("Formatting")
     regression_group = parser.add_argument_group("Regression")
     outlier_group    = parser.add_argument_group("Outlier Detection")
+    error_group      = parser.add_argument_group("Error Analysis")
 
     ## General Options ##
     general_group.add_argument("-i", "--input", type=str,
@@ -51,7 +58,7 @@ def get_args():
         help="Format specifier for output "
              "(default = .5f)")
     format_group.add_argument("--sep", type=str,
-        default="\s",
+        default="\s+",
         help="Separator in input tables (can be a regular expression) "
              "(default = whitespace)")
     format_group.add_argument("--output-sep", type=char,
@@ -67,10 +74,10 @@ def get_args():
 
     ## Regression Options ##
     regression_group.add_argument("--dependent-vars", type=str, nargs="+",
-        metavar="VAR",
+        metavar="VAR", required=True,
         help="List of dependent variables to regress on")
     regression_group.add_argument("--independent-vars", type=str, nargs="+",
-        metavar="VAR",
+        metavar="VAR", required=True,
         help="List of independent variables to regress on")
     regression_group.add_argument("--add-const", action="store_true",
         default=False,
@@ -91,7 +98,38 @@ def get_args():
         help="sigma clipping method to use "
              "(default = standard)")
 
+    ## Error Analysis Options ##
+    error_group.add_argument("--error-method", type=str, metavar="METHOD",
+        default="None", choices=["Monte_Carlo", "None"],
+        help="method used for computing errors on distances "
+             "(default = None)")
+    error_group.add_argument("--error-prefix", type=str,
+        default="",
+        help="columns whose names match a variable with this prefix will be "
+             "used for error calculations. "
+             "can be combined with --error-suffix. "
+             "one of the two must be used if --error-method is not None "
+             "(default = no prefix)")
+    error_group.add_argument("--error-suffix", type=str,
+        default="",
+        help="columns whose names match a variable with this suffix will be "
+             "used for error calculations. "
+             "can be combined with --error-prefix. "
+             "one of the two must be used if --error-method is not None "
+             "(default = no suffix)")
+    error_group.add_argument("--error-iterations", type=int,
+        default=1000,
+        help="number of iterations to use in the error determination, "
+             "if applicable "
+             "(default = 1000)")
+
     args = parser.parse_args()
+
+    args.error_method = error_choices[args.error_method]
+    if args.error_method is not None \
+       and args.error_prefix == args.error_suffix == "":
+            raise ArgumentError("An error prefix or suffix must be provided "
+                                "for error to be computed")
 
     args.sigma_method = sigma_choices[args.sigma_method]
 
@@ -103,9 +141,57 @@ def main(args=None):
 
     data = read_table(args.input, index_col=0, sep=args.sep,
                       engine="python")
-    add_coeff_rows(data, **vars(args))
-    n_coeff = len(args.dependent_vars) * (len(args.independent_vars)
-                                        + args.add_const)
+    add_coeff_rows(data,
+                   args.independent_vars, args.dependent_vars, args.add_const)
+    n_coeff = len(args.dependent_vars) \
+            * (len(args.independent_vars) + args.add_const)
+
+    try:
+        dependent_vars   = data[args.dependent_vars  ].iloc[:-n_coeff].values
+        independent_vars = data[args.independent_vars].iloc[:-n_coeff].values
+    except KeyError as e:
+        key = e.args[0]
+        print("Missing entry in input table for variable(s): {}".format(key),
+              file=stderr)
+        return 1
+
+    if args.error_method is not None:
+        try:
+            independent_vars_error = data[
+                [args.error_prefix + var + args.error_suffix
+                 for var in args.independent_vars]
+            ].iloc[:-n_coeff].values
+        except KeyError as e:
+            key = e.args[0]
+            print("Missing entry in input table for error: {}".format(key),
+                  file=stderr)
+            return 1
+
+        fit, fit_err = args.error_method(dependent_vars,
+                                         independent_vars,
+                                         independent_vars_error,
+                                         args.add_const,
+                                         args.sigma_method, args.sigma,
+                                         args.mean_modulus, args.units)
+        data[args.distance_label] = fit
+        data[args.error_prefix
+           + args.distance_label
+           + args.error_suffix] = fit_err
+    else:
+        fit = fit_with_sigma_clip(dependent_vars, independent_vars,
+                                  args.add_const,
+                                  args.sigma_method, args.sigma,
+                                  args.mean_modulus, args.units)
+        data[args.distance_label] = fit
+
+    data.to_csv(stdout, sep=args.output_sep, na_rep="NaN")
+
+    return 0
+
+    # Everything below is dead code
+    # which I'm only keeping as a reference until the above code works right
+
+        
     nrows, ncols = data.shape
     arg_coeff = numpy.arange(nrows-n_coeff, nrows)
 
