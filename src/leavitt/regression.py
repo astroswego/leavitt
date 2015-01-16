@@ -1,11 +1,9 @@
-from functools import reduce
-from itertools import chain, repeat
 import numpy
-
-from leavitt.utils import colvec, convert_units, zscore
+from leavitt.utils import convert_units, zscore
 
 __all__ = [
-    "distance_formula"
+    "distance_formula",
+    "fit_with_sigma_clip"
 ]
 
 

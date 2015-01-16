@@ -18,7 +18,7 @@ def convert_units(modulii, units):
         raise NotImplementedError
 
 def zscore(X):
-    return (X - numpy.nanmean(X)) / numpy.nanstd(X)
+    return (X - numpy.mean(X)) / numpy.std(X)
 
 def colvec(X):
     return numpy.reshape(X, (-1, 1))
