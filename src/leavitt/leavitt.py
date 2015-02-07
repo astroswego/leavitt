@@ -58,6 +58,8 @@ def get_args(argv=argv[1:]):
         help="Mean distance modulus of target, to be added to the obtained "
              "modulii "
              "(default = 0.0)")
+    general_group.add_argument("--debug", action="store_true",
+        help="Enable debug output")
 
     ## Parallel Options ##
     parallel_group.add_argument("--error-processes", type=int,
@@ -219,7 +221,8 @@ def main(args=None):
                                          args.mean_modulus, args.units,
                                          args.rcond, args.sigma_max_iter,
                                          args.error_iterations,
-                                         args.error_processes)
+                                         args.error_processes,
+                                         args.debug)
         data[args.distance_label      ] = fit
         data[args.distance_error_label] = fit_err
     else:
@@ -233,7 +236,8 @@ def main(args=None):
                           args.add_const, args.fit_modulus,
                           args.sigma_method, args.sigma,
                           args.mean_modulus, args.units,
-                          args.rcond, args.sigma_max_iter)
+                          args.rcond, args.sigma_max_iter,
+                          args.debug)
         data.loc[mask, args.distance_label] = fit
 
     data.to_csv(stdout, sep=args.output_sep, float_format=args.format,
