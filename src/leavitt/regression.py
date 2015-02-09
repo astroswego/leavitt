@@ -48,7 +48,7 @@ def design_matrix(dependent_vars, independent_vars, add_const=False):
 
         design_matrix[i*n_samples : (i+1)*n_samples, :n_samples] = diagonal
 
-    return design_matrix, numpy.reshape(dependent_vars, -1)
+    return design_matrix, numpy.transpose(dependent_vars).flatten()
 
 
 def simple_leavitt_law(dependent_vars, independent_vars, add_const, rcond,
@@ -56,7 +56,8 @@ def simple_leavitt_law(dependent_vars, independent_vars, add_const, rcond,
     n_samples, n_vars = dependent_vars.shape
 
     X = simple_design_matrix(independent_vars, add_const, n_vars)
-    y = numpy.reshape(dependent_vars, -1)
+    y = numpy.transpose(dependent_vars).flatten()
+
 
     if debug:
         _print_debug(X, y)
@@ -64,6 +65,8 @@ def simple_leavitt_law(dependent_vars, independent_vars, add_const, rcond,
     b, residuals, rank, s = numpy.linalg.lstsq(X, y, rcond=rcond)
 
     n_coeff = b.size
+
+    print(b, residuals, rank, s, file=stderr)
 
     fit = numpy.empty(n_samples+n_coeff, dtype=float)
     fit[:-n_coeff] = numpy.nan
