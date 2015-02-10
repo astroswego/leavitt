@@ -1,6 +1,8 @@
 import numpy
 from leavitt.utils import identity, zscore
 
+from sys import stdout, stderr
+
 __all__ = [
     "design_matrix",
     "leavitt_law"
@@ -46,18 +48,25 @@ def design_matrix(dependent_vars, independent_vars, add_const=False):
 
         design_matrix[i*n_samples : (i+1)*n_samples, :n_samples] = diagonal
 
-    return design_matrix, numpy.reshape(dependent_vars, -1)
+    return design_matrix, numpy.transpose(dependent_vars).flatten()
 
 
-def simple_leavitt_law(dependent_vars, independent_vars, add_const, rcond):
+def simple_leavitt_law(dependent_vars, independent_vars, add_const, rcond,
+                       debug=False):
     n_samples, n_vars = dependent_vars.shape
 
     X = simple_design_matrix(independent_vars, add_const, n_vars)
-    y = numpy.reshape(dependent_vars, -1)
+    y = numpy.transpose(dependent_vars).flatten()
+
+
+    if debug:
+        _print_debug(X, y)
 
     b, residuals, rank, s = numpy.linalg.lstsq(X, y, rcond=rcond)
 
     n_coeff = b.size
+
+    print(b, residuals, rank, s, file=stderr)
 
     fit = numpy.empty(n_samples+n_coeff, dtype=float)
     fit[:-n_coeff] = numpy.nan
@@ -72,17 +81,20 @@ def leavitt_law(dependent_vars, independent_vars, add_const=False,
                 fit_modulus=False,
                 sigma_method=zscore, sigma=0.0,
                 mean_modulus=0.0, unit_conversion=identity,
-                rcond=1e-3, max_iter=20):
+                rcond=1e-3, max_iter=20,
+                debug=False):
     n_samples, n_vars = dependent_vars.shape
     n_coeff = (1+add_const)*n_vars
 
     # if not fitting modulus, do simple PL fit
     if not fit_modulus:
         return simple_leavitt_law(dependent_vars, independent_vars,
-                                  add_const, rcond)
+                                  add_const, rcond, debug)
     # if sigma is 0 or less, do not perform any outlier detection
     if sigma <= 0:
         X, y = design_matrix(dependent_vars, independent_vars, add_const)
+        if debug:
+            _print_debug(X, y)
         # solve ``X*b = y`` for ``b``
         b, residuals, rank, s = numpy.linalg.lstsq(X, y, rcond=rcond)
         d = unit_conversion(b[:-n_coeff]+mean_modulus)
@@ -97,6 +109,8 @@ def leavitt_law(dependent_vars, independent_vars, add_const=False,
     for i in range(max_iter):
         X, y = design_matrix(dependent_vars[mask], independent_vars[mask],
                              add_const)
+        if debug:
+            _print_debug(x, y)
         # solve ``X*b = y`` for ``b``
         b, residuals, rank, s = numpy.linalg.lstsq(X, y, rcond=rcond)
         # extract distances from ``b`` and convert units
@@ -123,3 +137,12 @@ def _format_fit(dist, coeffs, mask, n_samples, n_coeff):
     fit[-n_coeff:]        = coeffs
 
     return fit
+
+def _print_debug(X, y):
+    n_rows, n_cols = X.shape
+    out = numpy.empty((n_rows, n_cols+2), dtype=float)
+    out[:n_rows, :n_cols] = X
+    out[:n_rows, n_cols] = numpy.nan
+    out[:n_rows, -1] = y
+    print("X, y =", file=stderr)
+    numpy.savetxt(stderr.buffer, out, fmt="%.5f")
