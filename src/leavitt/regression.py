@@ -66,8 +66,6 @@ def simple_leavitt_law(dependent_vars, independent_vars, add_const, rcond,
 
     n_coeff = b.size
 
-    print(b, residuals, rank, s, file=stderr)
-
     fit = numpy.empty(n_samples+n_coeff, dtype=float)
     fit[:-n_coeff] = numpy.nan
     fit[-n_coeff:] = b
