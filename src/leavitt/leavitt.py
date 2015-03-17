@@ -216,13 +216,12 @@ def main(args=None):
         fit, fit_err = args.error_method(dependent_vars,
                                          independent_vars,
                                          dependent_vars_error,
-                                         args.add_const, args.fit_modulus,
+                                         args.add_const,
                                          args.sigma_method, args.sigma,
                                          args.mean_modulus, args.units,
                                          args.rcond, args.sigma_max_iter,
                                          args.error_iterations,
-                                         args.error_processes,
-                                         args.debug)
+                                         args.error_processes)
         data[args.distance_label      ] = fit
         data[args.distance_error_label] = fit_err
     else:

@@ -21,6 +21,7 @@ def monte_carlo(dependent_vars, independent_vars, dependent_vars_error,
 
     # make the initial fit without error, in order to mark outliers
     initial_fit = leavitt_law(dependent_vars, independent_vars, add_const,
+                              True,
                               sigma_method, sigma,
                               mean_modulus, unit_conversion,
                               rcond, max_iter)
@@ -39,6 +40,7 @@ def monte_carlo(dependent_vars, independent_vars, dependent_vars_error,
         iterations)
     mc_fits = pmap(leavitt_law, mc_dependent_vars, processes=processes,
                    independent_vars=independent_vars[mask], add_const=add_const,
+                   fit_modulus=True,
                    mean_modulus=mean_modulus, unit_conversion=unit_conversion,
                    rcond=rcond, max_iter=max_iter)
 
