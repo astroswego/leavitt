@@ -32,7 +32,6 @@ def add_coeff_rows(frame, independent_vars, dependent_vars, add_const,
     for (dep, ind) in product(dependent_vars, independent_vars):
         coeff_name = "{}_{}".format(ind, dep)
         frame.loc[coeff_name] = numpy.nan
-    
 
 def get_args(argv=argv[1:]):
     parser = ArgumentParser(prog="leavitt")
