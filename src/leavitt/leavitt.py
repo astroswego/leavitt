@@ -188,30 +188,29 @@ def main(args=None):
               file=stderr)
         return 1
 
+    try:
+        dependent_vars_error = data[
+            [args.error_prefix + var + args.error_suffix
+             for var in args.dependent_vars]
+        ].iloc[:-n_coeff].values
+
+    except KeyError as e:
+        key = e.args[0]
+        print("Missing entry in input table for error: {}".format(key),
+              file=stderr)
+        return 1
+
+    nan_rows = any_nan(dependent_vars,
+                       independent_vars,
+                       dependent_vars_error,
+                       axis=1)
+    non_nan_rows = ~nan_rows
+    dependent_vars       =   dependent_vars[    non_nan_rows]
+    independent_vars     = independent_vars[    non_nan_rows]
+    dependent_vars_error = dependent_vars_error[non_nan_rows]
+    mask = numpy.concatenate((non_nan_rows,
+                              numpy.ones(n_coeff, dtype=bool)))
     if args.error_method is not None:
-        try:
-            dependent_vars_error = data[
-                [args.error_prefix + var + args.error_suffix
-                 for var in args.dependent_vars]
-            ].iloc[:-n_coeff].values
-
-        except KeyError as e:
-            key = e.args[0]
-            print("Missing entry in input table for error: {}".format(key),
-                  file=stderr)
-            return 1
-
-        nan_rows = any_nan(dependent_vars,
-                           independent_vars,
-                           dependent_vars_error,
-                           axis=1)
-        non_nan_rows = ~nan_rows
-        dependent_vars       =   dependent_vars[    non_nan_rows]
-        independent_vars     = independent_vars[    non_nan_rows]
-        dependent_vars_error = dependent_vars_error[non_nan_rows]
-        mask = numpy.concatenate((non_nan_rows,
-                                  numpy.ones(n_coeff, dtype=bool)))
-
         fit, fit_err = args.error_method(dependent_vars,
                                          independent_vars,
                                          dependent_vars_error,
@@ -224,13 +223,8 @@ def main(args=None):
         data[args.distance_label      ] = fit
         data[args.distance_error_label] = fit_err
     else:
-        nan_rows = any_nan(dependent_vars, independent_vars, axis=1)
-        non_nan_rows = ~nan_rows
-        dependent_vars   =   dependent_vars[non_nan_rows]
-        independent_vars = independent_vars[non_nan_rows]
-        mask = numpy.concatenate((non_nan_rows,
-                                  numpy.ones(n_coeff, dtype=bool)))
         fit = leavitt_law(dependent_vars, independent_vars,
+                          dependent_vars_error,
                           args.add_const, args.fit_modulus,
                           args.sigma_method, args.sigma,
                           args.mean_modulus, args.units,
