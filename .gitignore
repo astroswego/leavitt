@@ -31,3 +31,12 @@ nosetests.xml
 
 # Translations
 *.mo
+
+# Emacs
+*~
+
+
+# Data
+input/
+temp/
+output/
