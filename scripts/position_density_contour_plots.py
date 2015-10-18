@@ -3,7 +3,6 @@ from sys import argv, stdin, stderr
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from scipy.interpolate import griddata
 from scipy.stats import binned_statistic_2d
 
 usage_string = """\
@@ -59,7 +58,6 @@ def main(output_prefix, output_extension, *band_names):
 
         fig.savefig(output_prefix + band_name + "." + output_extension)
         plt.close(fig)
-    return 0
 
 if __name__ == "__main__":
     validate_args()
